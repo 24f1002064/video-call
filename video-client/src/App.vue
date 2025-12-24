@@ -42,7 +42,7 @@ onMounted(async () => {
   };
 
   socket.value.onmessage = (event) => {
-    console.log("Message received from server", event.data);
+    handleMessage(event)
   }
 
   socket.value.onerror = (error)=> {
@@ -68,7 +68,7 @@ const sendMessage = (message) => {
 }
 
 const startCall = async () => {
-  await createPeerConnection()
+  createPeerConnection()
   
   const offer = await peerConnection.createOffer()
   await peerConnection.setLocalDescription(offer)
@@ -77,6 +77,30 @@ const startCall = async () => {
     type: 'offer',
     offer: offer
   })
+}
+
+const handleMessage = async(event) => {
+  const message = JSON.parse(event.data)
+
+  console.log("Handling message: ", message)
+  if (message.type === 'offer') {
+    await createPeerConnection()
+
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(message.offer))
+
+    const answer = await peerConnection.createAnswer()
+    await peerConnection.setLocalDescription(answer)
+    sendMessage({
+      type: 'answer',
+      answer: answer
+    })
+  } else if (message.type === 'answer') {
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(message.answer))
+  } else if (message.type === 'ice-candidate') {
+        if (peerConnection) {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(message.candidate))
+        }
+    }
 }
 </script>
 
