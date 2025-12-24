@@ -7,6 +7,7 @@ const remoteVideo = ref(null)
 
 const isCameraOn = ref(true)
 const isMicOn = ref(true)
+const roomId = ref(null);
 
 const toggleCamera = () => {
   const stream = localVideo.value.srcObject
@@ -59,25 +60,46 @@ const createPeerConnection = () => {
   })
 }
 
+const connectWebSocket = (currentRoomId) => {
+    socket.value = new WebSocket(`ws://localhost:8080?room=${currentRoomId}`);
+
+    socket.value.onopen = () => {
+        console.log(`WebSocket connection established for room: ${currentRoomId}`);
+        socket.value.send(JSON.stringify({ type: 'join-room', roomId: currentRoomId }));
+    };
+
+    socket.value.onmessage = (event) => {
+        handleMessage(event)
+    };
+
+    socket.value.onerror = (error)=> {
+        console.error("WebSocket error: ", error);
+    };
+
+    socket.value.onclose = () => {
+        console.log("WebSocket connection closed");
+    };
+}
+
+const joinRoom = (id) => {
+    roomId.value = id;
+    connectWebSocket(id);
+};
+
+const createRoom = async () => {
+  try {
+    const response = await fetch('http://localhost:8000/api/create-room.php');
+    const data = await response.json();
+    roomId.value = data.roomId;
+    history.pushState({ roomId: data.roomId }, '', `?room=${data.roomId}`);
+    joinRoom(data.roomId);
+  } catch (error) {
+    console.error('Error creating room:', error);
+  }
+};
+
+
 onMounted(async () => {
-  socket.value = new WebSocket("ws://localhost:8080")
-
-  socket.value.onopen = () => {
-    console.log("WebSocket connection established");
-  };
-
-  socket.value.onmessage = (event) => {
-    handleMessage(event)
-  }
-
-  socket.value.onerror = (error)=> {
-    console.error("WebSocket error: ", error);
-  }
-
-  socket.value.onclose = () => {
-    console.log("WebSocket connection closed");
-  }
-
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
     if (localVideo.value) {
@@ -85,6 +107,13 @@ onMounted(async () => {
     }
   } catch (error){
     console.error('Error here', error)
+  }
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const existingRoomId = urlParams.get('room');
+
+  if (existingRoomId) {
+    joinRoom(existingRoomId);
   }
 });
 
@@ -145,8 +174,11 @@ const handleMessage = async(event) => {
   </div>
 
   <div class="controls" style="margin-top: 20px; display: flex; gap: 10px;">
-      <button @click="startCall" style="padding: 10px 20px; font-size: 16px;">
-        📞 Call Everyone
+      <button v-if="!roomId" @click="createRoom" style="padding: 10px 20px; font-size: 16px;">
+        ➕ Create Room
+      </button>
+      <button v-else @click="startCall" style="padding: 10px 20px; font-size: 16px;">
+        📞 Start Call in Room {{ roomId }}
       </button>
       <button @click="toggleCamera" style="padding: 10px 20px; font-size: 16px;">
         {{ isCameraOn ? '📷 Turn Camera Off' : '📷 Turn Camera On' }}
