@@ -462,8 +462,10 @@ onUnmounted(() => {
     backdrop-filter: blur(10px);
     width: 100%;
     justify-content: center;
-    position: sticky;
+    position: fixed;
     bottom: 0;
+    left: 0;
+    right: 0;
     z-index: 100;
 }
 
