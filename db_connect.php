@@ -1,5 +1,4 @@
 <?php
-require __DIR__ . '/vendor/autoload.php';
 
 if (file_exists(__DIR__ . '/.env')) {
     $dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
@@ -9,27 +8,39 @@ if (file_exists(__DIR__ . '/.env')) {
 function getDatabaseConnection() {
     if (isset($_ENV['DATABASE_URL']) && !empty($_ENV['DATABASE_URL'])) {
         $db_url = parse_url($_ENV['DATABASE_URL']);
-        
-        $servername = $db_url['host'];
-        $username = $db_url['user'];
-        $password = $db_url['pass'];
-        $dbname = ltrim($db_url['path'], '/');
-        $port = isset($db_url['port']) ? $db_url['port'] : 3306;
+
+        $servername = $db_url['host'] ?? null;
+        $username = $db_url['user'] ?? null;
+        $password = $db_url['pass'] ?? null;
+        $dbname = ltrim($db_url['path'] ?? '', '/');
+        $port = $db_url['port'] ?? 3306;
+
+        error_log("Connecting to: $servername:$port as $username (db: $dbname)");
+
+        if (!$servername) {
+            throw new Exception("DATABASE_URL host is missing");
+        }
     } else {
         $servername = $_ENV['DB_HOST'] ?? 'localhost';
         $username = $_ENV['DB_USERNAME'] ?? 'root';
         $password = $_ENV['DB_PASSWORD'] ?? '';
         $dbname = $_ENV['DB_NAME'] ?? 'video_call';
         $port = 3306;
+
+        error_log("Using individual env vars: $servername:$port");
     }
 
-    $conn = new mysqli($servername, $username, $password, $dbname, $port);
+    try {
+        $conn = new mysqli($servername, $username, $password, $dbname, $port);
+    } catch (Exception $e) {
+        error_log("mysqli connection error: " . $e->getMessage());
+        throw new Exception("Database connection failed: " . $e->getMessage() . " (Trying to connect to: $servername:$port)");
+    }
 
     if ($conn->connect_error) {
-        http_response_code(500);
-        header('Content-Type: application/json');
-        echo json_encode(['error' => 'Database connection failed: ' . $conn->connect_error . " (Host: $servername)"]);
-        exit;
+        $error = "Database connection failed: " . $conn->connect_error . " (Host: $servername:$port)";
+        error_log($error);
+        throw new Exception($error);
     }
 
     $sql = "CREATE TABLE IF NOT EXISTS rooms (
